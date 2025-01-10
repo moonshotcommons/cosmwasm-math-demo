@@ -4,111 +4,71 @@ This is a  example of a CosmWasm contract that implements simple maths operation
 
 ---
 
-## Math Operations
+## 合约部署及交互演示
+### 账户管理
+```
+# 创建
+xiond keys add your_account
 
-```rust
-pub fn execute(
-    deps: DepsMut,
-    _env: Env,
-    _info: MessageInfo,
-    msg: ExecuteMsg,
-) -> Result<Response, ContractError> {
-    match msg {
-    ExecuteMsg::Operations { a, b } => execute_operations(deps,a,b),
-}
-}
+# 查询余额
+xiond query bank balances your_account --node https://rpc.xion-testnet-1.burnt.com:443
 ```
 
-This `execute` function takes a enum of `ExecuteMsg` which actually contains all the contract function and matches them with the function user is calling. In our case `Operations`. Then it calls `execute_operations` function:
+### 合约编译
+```
+cargo wasm 
 
-```rust
-pub fn execute_operations(deps: DepsMut, a: u128, b: u128) -> Result<Response, ContractError> {
-        // Checking if numbers are not zero
-        if a == 0 && b == 0 {
-            return Err(ContractError::CanNotBeZero());
-        }
-
-        // Addition
-        let addition_result = a + b;
-
-        // Subtraction
-        let subtraction_result = a - b;
-
-        // Multiplication
-        let multiplication_result = a * b;
-
-        // Division
-        let division_result = a / b;
-
-        // Modulo
-        let modulo_result = a % b;
-
-        // Exponentiation
-        let exponent: u32 = 3;
-        let exponentiation_result: u128 = a.pow(exponent);
-
-        // Create the response
-        let response = OperationsResponse {
-            addition_result,
-            subtraction_result,
-            multiplication_result,
-            division_result,
-            modulo_result,
-            exponentiation_result,
-        };
-
-        // Fetching the state
-        RESULT.load(deps.storage).unwrap();
-
-        // Update the state
-        RESULT.save(deps.storage, &response).unwrap();
-
-        let res = Response::new().add_attributes(vec![
-            ("action", "operations"),
-            ("a", &a.to_string()),
-            ("b", &b.to_string()),
-            ("addition_res", &addition_result.to_string()),
-            ("substraction_res", &subtraction_result.to_string()),
-            ("multiplicationn_res", &multiplication_result.to_string()),
-            ("division_res", &division_result.to_string()),
-            ("modulo_res", &modulo_result.to_string()),
-            ("exponential_res", &exponentiation_result.to_string()),
-        ]);
-
-        Ok(res)
-    }
+# 优化合约大小
+RUSTFLAGS='-C link-arg=-s' cargo wasm
 ```
 
-This function takes two parameters a and b for mathmatical operations and store the result in `RESULT` global state variable stored in `state.rs` :
+### 部署上链
+```
+# 设置环境变量
+RPC="https://rpc.xion-testnet-1.burnt.com:443"
+export NODE=(--node $RPC)
+export TXFLAG=($NODE --chain-id xion-testnet-1 --gas-prices 0.25uxion --gas auto --gas-adjustment 1.4)
 
-```rust
-pub const RESULT: Item<OperationsResponse> = Item::new("result");
+# 上传
+xiond tx wasm store target/wasm32-unknown-unknown/release/cosmwasm_math.wasm --from demo $TXFLAG -y --output json
+
+# 查询 code_id
+RESP=$(xiond q tx C11556D6A214DCB3655102A4D9631F0AA65EAEDABBA2BCBD676E57273A2DB62D -o json $NODE)
+
+CODE_ID=$(echo "$RESP" | jq -r '.events[]| select(.type=="store_code").attributes[]| select(.key=="code_id").value')
+
+echo $CODE_ID
+
 ```
 
-***NOTE  We are using `Item` here for storage if we want better storage options then we can use `MAP` from `cw_storage_plus` which store values in key-value pairs.
-We can query the result using next step.
-
-### Query
-
-This example query endpoint is basically getting the result  of mathmatical operations  .
-
-```rust
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<QueryResponse, StdError> {
-    match msg {
-        QueryMsg::GetResponse {} => get_response(deps),
-    }
-}
+### 实例化合约
 ```
-This `query` function takes a enum of `QueryMsg` which actually contains all the contract query function and matches them with the function user is calling. In our case `GetResponse`. Then it calls `get_response` function:
+# 参数
+INIT='{}'
 
-```rust
-pub fn get_response(deps: Deps) -> Result<QueryResponse, StdError> {
-    let result = RESULT.load(deps.storage)?;
+# 实例化
+xiond tx wasm instantiate $CODE_ID "$INIT" --from demo --label "initialize cosmwasm math contract" $TXFLAG -y --no-admin
 
-    to_binary(&result)
-}
+# 查询合约地址
+xiond query wasm list-contract-by-code $CODE_ID $NODE --output json
+
 ```
- This function return the result of our mathmatical operation.
+
+### 合约读写
+```
+# 参数
+EXECMSG='{"operations":{"a":"5","b":"2"}}'
+CONTRACT='xion1vvddpg4drp34k388xej297duptgwasac832xmpan2je799nwp3uqnzf29j'
+
+# 计算
+xiond tx wasm execute $CONTRACT "$EXECMSG" --amount 100uxion --from demo $TXFLAG -y
+
+# 参数
+QUERYMSG='{"get_response":{}}'
+
+# 查询
+xiond query wasm contract-state smart $CONTRACT "$QUERYMSG" $NODE --output json
+```
 
 ---
 
