@@ -52,6 +52,9 @@ make install
 
 # 验证
 xiond --help
+
+# 或者下载构建好的工具
+https://github.com/burnt-labs/xion/releases
 ```
 
 
@@ -66,5 +69,5 @@ xiond --help
 https://explorer.burnt.com/xion-testnet-1
 
 https://testnet.xion.explorers.guru/
----
+ ---
 
